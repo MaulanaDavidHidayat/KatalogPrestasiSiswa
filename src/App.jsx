@@ -72,17 +72,37 @@
 
 // export default App;
 
+// import { useState } from 'react';
+
+// function App() {
+//   // Membuat state bernama 'angka' dengan nilai awal 0
+//   const [angka, setAngka] = useState(0);
+
+//   return (
+//     <div>
+//       <h1>Angka saat ini: {angka}</h1>
+//       <button onClick={() => setAngka(angka + 1)}>Tambah (+)</button>
+//       <button onClick={() => setAngka(angka - 1)}>Kurang (-)</button>
+//     </div>
+//   );
+// }
+
+// export default App;
+
 import { useState } from 'react';
 
 function App() {
-  // Membuat state bernama 'angka' dengan nilai awal 0
-  const [angka, setAngka] = useState(0);
+  const [teks, setTeks] = useState('');
 
   return (
     <div>
-      <h1>Angka saat ini: {angka}</h1>
-      <button onClick={() => setAngka(angka + 1)}>Tambah (+)</button>
-      <button onClick={() => setAngka(angka - 1)}>Kurang (-)</button>
+      <h1>Kamu mengetik: {teks}</h1>
+      <input 
+        type="text" 
+        placeholder="Ketik sesuatu di sini..." 
+        value={teks}
+        onChange={(e) => setTeks(e.target.value)}
+      />
     </div>
   );
 }
