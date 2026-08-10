@@ -92,19 +92,72 @@
 import { useEffect, useState } from "react";
 
 function App() {
+  // =========================================================
+  // SUPABASE CONFIG
+  // =========================================================
+
+  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+  const SUPABASE_ANON_KEY =
+    import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  // =========================================================
+  // STATE
+  // =========================================================
+
   const [siswa, setSiswa] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  // Search
   const [search, setSearch] = useState("");
 
-  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-  const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  // Modal POST
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [addError, setAddError] = useState("");
 
-  // =========================
-  // GET DATA SISWA
-  // =========================
+  // Modal PATCH
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [updating, setUpdating] = useState(false);
+  const [editError, setEditError] = useState("");
+
+  // =========================================================
+  // FORM TAMBAH
+  // =========================================================
+
+  const emptyForm = {
+    nis: "",
+    nama: "",
+    jenis_kelamin: "",
+    tanggal_lahir: "",
+    alamat: "",
+    kelas: "",
+    jurusan: "",
+    no_hp: "",
+    email: "",
+  };
+
+  const [form, setForm] = useState(emptyForm);
+
+  // =========================================================
+  // FORM EDIT
+  // =========================================================
+
+  const [editForm, setEditForm] = useState(emptyForm);
+
+  // =========================================================
+  // GET - AMBIL DATA PERTAMA KALI
+  //
+  // Sengaja fetch langsung di dalam useEffect supaya tidak
+  // terkena warning react-hooks/set-state-in-effect.
+  // =========================================================
+
   useEffect(() => {
-    const fetchSiswa = async () => {
+    let active = true;
+
+    const getData = async () => {
       try {
         const response = await fetch(
           `${SUPABASE_URL}/rest/v1/siswa?select=*&order=id_siswa.asc`,
@@ -119,404 +172,504 @@ function App() {
         );
 
         if (!response.ok) {
+          const errorData = await response.json().catch(() => null);
+
           throw new Error(
-            `Gagal mengambil data siswa. Status: ${response.status}`
+            errorData?.message ||
+              `Gagal mengambil data. Status: ${response.status}`
           );
         }
 
         const data = await response.json();
 
-        setSiswa(data);
+        if (active) {
+          setSiswa(data);
+          setError("");
+          setLoading(false);
+        }
       } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
+        if (active) {
+          setError(err.message);
+          setLoading(false);
+        }
       }
     };
 
-    fetchSiswa();
+    getData();
+
+    return () => {
+      active = false;
+    };
   }, [SUPABASE_URL, SUPABASE_ANON_KEY]);
 
-  // =========================
-  // SEARCH / FILTER
-  // =========================
+  // =========================================================
+  // GET - REFRESH DATA
+  //
+  // Fungsi ini dipanggil setelah POST, PATCH, DELETE.
+  // Tidak dipanggil langsung dari useEffect.
+  // =========================================================
+
+  const fetchSiswa = async () => {
+    try {
+      const response = await fetch(
+        `${SUPABASE_URL}/rest/v1/siswa?select=*&order=id_siswa.asc`,
+        {
+          method: "GET",
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+
+        throw new Error(
+          errorData?.message ||
+            `Gagal mengambil data. Status: ${response.status}`
+        );
+      }
+
+      const data = await response.json();
+
+      setSiswa(data);
+      setError("");
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  // =========================================================
+  // UPDATE FORM TAMBAH
+  // =========================================================
+
+  const updateForm = (field, value) => {
+    setForm((previous) => ({
+      ...previous,
+      [field]: value,
+    }));
+  };
+
+  // =========================================================
+  // UPDATE FORM EDIT
+  // =========================================================
+
+  const updateEditForm = (field, value) => {
+    setEditForm((previous) => ({
+      ...previous,
+      [field]: value,
+    }));
+  };
+
+  // =========================================================
+  // RESET FORM TAMBAH
+  // =========================================================
+
+  const resetForm = () => {
+    setForm(emptyForm);
+    setAddError("");
+  };
+
+  // =========================================================
+  // RESET FORM EDIT
+  // =========================================================
+
+  const resetEditForm = () => {
+    setEditForm(emptyForm);
+    setEditError("");
+    setEditingId(null);
+  };
+
+  // =========================================================
+  // POST - TAMBAH DATA SISWA
+  // =========================================================
+
+  const handleAdd = async (event) => {
+    event.preventDefault();
+
+    setSaving(true);
+    setAddError("");
+    setSuccess("");
+
+    try {
+      const response = await fetch(
+        `${SUPABASE_URL}/rest/v1/siswa`,
+        {
+          method: "POST",
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            "Content-Type": "application/json",
+            Prefer: "return=representation",
+          },
+          body: JSON.stringify(form),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+
+        throw new Error(
+          errorData?.message ||
+            `Gagal menambahkan data. Status: ${response.status}`
+        );
+      }
+
+      // Ambil ulang data setelah POST berhasil
+      await fetchSiswa();
+
+      resetForm();
+      setShowAddModal(false);
+
+      setSuccess("Data siswa berhasil ditambahkan.");
+
+      setTimeout(() => {
+        setSuccess("");
+      }, 3000);
+    } catch (err) {
+      setAddError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // =========================================================
+  // BUKA MODAL EDIT
+  // =========================================================
+
+  const handleOpenEdit = (item) => {
+    setEditingId(item.id_siswa);
+
+    setEditForm({
+      nis: item.nis || "",
+      nama: item.nama || "",
+      jenis_kelamin: item.jenis_kelamin || "",
+      tanggal_lahir: item.tanggal_lahir || "",
+      alamat: item.alamat || "",
+      kelas: item.kelas || "",
+      jurusan: item.jurusan || "",
+      no_hp: item.no_hp || "",
+      email: item.email || "",
+    });
+
+    setEditError("");
+    setShowEditModal(true);
+  };
+
+  // =========================================================
+  // PATCH - UPDATE DATA SISWA
+  // =========================================================
+
+  const handleUpdate = async (event) => {
+    event.preventDefault();
+
+    if (!editingId) {
+      setEditError("ID siswa tidak ditemukan.");
+      return;
+    }
+
+    setUpdating(true);
+    setEditError("");
+    setSuccess("");
+
+    try {
+      const response = await fetch(
+        `${SUPABASE_URL}/rest/v1/siswa?id_siswa=eq.${editingId}`,
+        {
+          method: "PATCH",
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            "Content-Type": "application/json",
+            Prefer: "return=representation",
+          },
+          body: JSON.stringify(editForm),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+
+        throw new Error(
+          errorData?.message ||
+            `Gagal mengupdate data. Status: ${response.status}`
+        );
+      }
+
+      // Ambil ulang data setelah PATCH berhasil
+      await fetchSiswa();
+
+      setShowEditModal(false);
+      resetEditForm();
+
+      setSuccess("Data siswa berhasil diperbarui.");
+
+      setTimeout(() => {
+        setSuccess("");
+      }, 3000);
+    } catch (err) {
+      setEditError(err.message);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  // =========================================================
+  // DELETE - HAPUS DATA SISWA
+  // =========================================================
+
+  const handleDelete = async (id, nama) => {
+    const confirmed = window.confirm(
+      `Apakah kamu yakin ingin menghapus data "${nama}"?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setError("");
+      setSuccess("");
+
+      const response = await fetch(
+        `${SUPABASE_URL}/rest/v1/siswa?id_siswa=eq.${id}`,
+        {
+          method: "DELETE",
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            "Content-Type": "application/json",
+            Prefer: "return=representation",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+
+        throw new Error(
+          errorData?.message ||
+            `Gagal menghapus data. Status: ${response.status}`
+        );
+      }
+
+      // Ambil ulang data setelah DELETE berhasil
+      await fetchSiswa();
+
+      setSuccess(`Data "${nama}" berhasil dihapus.`);
+
+      setTimeout(() => {
+        setSuccess("");
+      }, 3000);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  // =========================================================
+  // SEARCH
+  // =========================================================
+
   const filteredSiswa = siswa.filter((item) => {
-    const keyword = search.toLowerCase();
+    const keyword = search.toLowerCase().trim();
 
     return (
-      String(item.id_siswa).toLowerCase().includes(keyword) ||
-      String(item.nis || "").toLowerCase().includes(keyword) ||
-      String(item.nama || "").toLowerCase().includes(keyword) ||
-      String(item.kelas || "").toLowerCase().includes(keyword) ||
-      String(item.jurusan || "").toLowerCase().includes(keyword) ||
-      String(item.alamat || "").toLowerCase().includes(keyword) ||
-      String(item.email || "").toLowerCase().includes(keyword)
+      String(item.id_siswa || "")
+        .toLowerCase()
+        .includes(keyword) ||
+      String(item.nis || "")
+        .toLowerCase()
+        .includes(keyword) ||
+      String(item.nama || "")
+        .toLowerCase()
+        .includes(keyword) ||
+      String(item.kelas || "")
+        .toLowerCase()
+        .includes(keyword) ||
+      String(item.jurusan || "")
+        .toLowerCase()
+        .includes(keyword) ||
+      String(item.alamat || "")
+        .toLowerCase()
+        .includes(keyword) ||
+      String(item.email || "")
+        .toLowerCase()
+        .includes(keyword)
     );
   });
 
-  // =========================
+  // =========================================================
   // STATISTIK
-  // =========================
-  const jumlahSiswa = siswa.length;
+  // =========================================================
 
   const jumlahLakiLaki = siswa.filter(
     (item) =>
-      String(item.jenis_kelamin).toUpperCase() === "L" ||
-      String(item.jenis_kelamin).toLowerCase() === "laki-laki"
+      String(item.jenis_kelamin || "").toUpperCase() === "L"
   ).length;
 
   const jumlahPerempuan = siswa.filter(
     (item) =>
-      String(item.jenis_kelamin).toUpperCase() === "P" ||
-      String(item.jenis_kelamin).toLowerCase() === "perempuan"
+      String(item.jenis_kelamin || "").toUpperCase() === "P"
   ).length;
 
-  // =========================
+  // =========================================================
   // FORMAT TANGGAL
-  // =========================
+  // =========================================================
+
   const formatTanggal = (tanggal) => {
-    if (!tanggal) return "-";
+    if (!tanggal) {
+      return "-";
+    }
 
-    const date = new Date(tanggal);
-
-    return date.toLocaleDateString("id-ID", {
+    return new Date(tanggal).toLocaleDateString("id-ID", {
       day: "2-digit",
       month: "short",
       year: "numeric",
     });
   };
 
+  // =========================================================
+  // RETURN
+  // =========================================================
+
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background:
-          "linear-gradient(135deg, #eef4ff 0%, #f8fafc 50%, #eef2ff 100%)",
-        fontFamily:
-          "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-        color: "#172033",
-      }}
-    >
-      {/* =========================
+    <div style={styles.page}>
+
+      {/* =====================================================
           HEADER
-      ========================= */}
-      <header
-        style={{
-          background: "rgba(255, 255, 255, 0.9)",
-          borderBottom: "1px solid #e5e7eb",
-          position: "sticky",
-          top: 0,
-          zIndex: 10,
-          backdropFilter: "blur(12px)",
-        }}
-      >
-        <div
-          style={{
-            maxWidth: "1500px",
-            margin: "0 auto",
-            padding: "18px 30px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "20px",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "14px",
-            }}
-          >
-            <div
-              style={{
-                width: "46px",
-                height: "46px",
-                borderRadius: "13px",
-                background: "linear-gradient(135deg, #2563eb, #4f46e5)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#ffffff",
-                fontSize: "22px",
-                fontWeight: "800",
-                boxShadow: "0 8px 20px rgba(37, 99, 235, 0.25)",
-              }}
-            >
+      ===================================================== */}
+
+      <header style={styles.header}>
+        <div style={styles.headerInner}>
+
+          <div style={styles.brand}>
+            <div style={styles.logo}>
               S
             </div>
 
             <div>
-              <div
-                style={{
-                  fontSize: "18px",
-                  fontWeight: "800",
-                  color: "#111827",
-                }}
-              >
+              <div style={styles.brandTitle}>
                 Sistem Data Siswa
               </div>
 
-              <div
-                style={{
-                  fontSize: "12px",
-                  color: "#64748b",
-                  marginTop: "2px",
-                }}
-              >
+              <div style={styles.brandSubtitle}>
                 React JS • Vite • Supabase
               </div>
             </div>
           </div>
 
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "8px 13px",
-              backgroundColor: "#ecfdf5",
-              border: "1px solid #bbf7d0",
-              borderRadius: "999px",
-              color: "#15803d",
-              fontSize: "13px",
-              fontWeight: "600",
-            }}
-          >
-            <span
-              style={{
-                width: "8px",
-                height: "8px",
-                backgroundColor: "#22c55e",
-                borderRadius: "50%",
-                display: "inline-block",
-              }}
-            />
+          <div style={styles.connection}>
+            <span style={styles.connectionDot}></span>
             Supabase Connected
           </div>
+
         </div>
       </header>
 
-      {/* =========================
+      {/* =====================================================
           MAIN
-      ========================= */}
-      <main
-        style={{
-          maxWidth: "1500px",
-          margin: "0 auto",
-          padding: "35px 30px 50px",
-        }}
-      >
+      ===================================================== */}
+
+      <main style={styles.main}>
+
         {/* HERO */}
-        <section
-          style={{
-            marginBottom: "28px",
-          }}
-        >
-          <p
-            style={{
-              margin: "0 0 8px",
-              color: "#2563eb",
-              fontSize: "13px",
-              fontWeight: "700",
-              textTransform: "uppercase",
-              letterSpacing: "1px",
-            }}
-          >
-            Dashboard
-          </p>
 
-          <h1
-            style={{
-              margin: "0",
-              fontSize: "34px",
-              lineHeight: "1.2",
-              fontWeight: "800",
-              color: "#111827",
-            }}
-          >
-            Data Siswa
-          </h1>
+        <section style={styles.hero}>
 
-          <p
-            style={{
-              margin: "10px 0 0",
-              color: "#64748b",
-              fontSize: "15px",
+          <div>
+            <div style={styles.eyebrow}>
+              DASHBOARD
+            </div>
+
+            <h1 style={styles.title}>
+              Data Siswa
+            </h1>
+
+            <p style={styles.description}>
+              Kelola data siswa menggunakan React JS
+              dan Supabase REST API.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              resetForm();
+              setShowAddModal(true);
             }}
+            style={styles.addButton}
           >
-            Kelola dan lihat data siswa yang tersimpan pada database Supabase.
-          </p>
+            + Tambah Siswa
+          </button>
+
         </section>
 
-        {/* =========================
-            STAT CARDS
-        ========================= */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: "18px",
-            marginBottom: "28px",
-          }}
-        >
-          {/* TOTAL */}
-          <div style={statCardStyle}>
-            <div
-              style={{
-                ...iconStyle,
-                backgroundColor: "#eff6ff",
-                color: "#2563eb",
-              }}
-            >
-              👥
-            </div>
+        {/* SUCCESS */}
 
-            <div>
-              <p style={statLabelStyle}>Total Siswa</p>
-
-              <h2 style={statNumberStyle}>
-                {loading ? "..." : jumlahSiswa}
-              </h2>
-            </div>
+        {success && (
+          <div style={styles.success}>
+            ✓ {success}
           </div>
+        )}
 
-          {/* LAKI-LAKI */}
-          <div style={statCardStyle}>
-            <div
-              style={{
-                ...iconStyle,
-                backgroundColor: "#eef2ff",
-                color: "#4f46e5",
-              }}
-            >
-              👨
-            </div>
+        {/* =====================================================
+            STATISTIK
+        ===================================================== */}
 
-            <div>
-              <p style={statLabelStyle}>Laki-laki</p>
+        <div style={styles.statsGrid}>
 
-              <h2 style={statNumberStyle}>
-                {loading ? "..." : jumlahLakiLaki}
-              </h2>
-            </div>
-          </div>
+          <StatCard
+            icon="👥"
+            title="Total Siswa"
+            value={loading ? "..." : siswa.length}
+          />
 
-          {/* PEREMPUAN */}
-          <div style={statCardStyle}>
-            <div
-              style={{
-                ...iconStyle,
-                backgroundColor: "#fdf2f8",
-                color: "#db2777",
-              }}
-            >
-              👩
-            </div>
+          <StatCard
+            icon="👨"
+            title="Laki-laki"
+            value={loading ? "..." : jumlahLakiLaki}
+          />
 
-            <div>
-              <p style={statLabelStyle}>Perempuan</p>
+          <StatCard
+            icon="👩"
+            title="Perempuan"
+            value={loading ? "..." : jumlahPerempuan}
+          />
 
-              <h2 style={statNumberStyle}>
-                {loading ? "..." : jumlahPerempuan}
-              </h2>
-            </div>
-          </div>
+          <StatCard
+            icon="✓"
+            title="Status Database"
+            value={loading ? "..." : "Aktif"}
+          />
 
-          {/* STATUS */}
-          <div style={statCardStyle}>
-            <div
-              style={{
-                ...iconStyle,
-                backgroundColor: "#ecfdf5",
-                color: "#16a34a",
-              }}
-            >
-              ✓
-            </div>
-
-            <div>
-              <p style={statLabelStyle}>Status Database</p>
-
-              <h2
-                style={{
-                  ...statNumberStyle,
-                  fontSize: "20px",
-                  color: "#16a34a",
-                }}
-              >
-                {loading ? "Loading" : error ? "Error" : "Aktif"}
-              </h2>
-            </div>
-          </div>
         </div>
 
-        {/* =========================
-            CONTENT CARD
-        ========================= */}
-        <section
-          style={{
-            backgroundColor: "#ffffff",
-            border: "1px solid #e5e7eb",
-            borderRadius: "18px",
-            boxShadow: "0 10px 30px rgba(15, 23, 42, 0.06)",
-            overflow: "hidden",
-          }}
-        >
+        {/* =====================================================
+            TABLE CARD
+        ===================================================== */}
+
+        <section style={styles.tableCard}>
+
           {/* TABLE HEADER */}
-          <div
-            style={{
-              padding: "22px 24px",
-              borderBottom: "1px solid #e5e7eb",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: "20px",
-              flexWrap: "wrap",
-            }}
-          >
+
+          <div style={styles.tableHeader}>
+
             <div>
-              <h2
-                style={{
-                  margin: "0 0 5px",
-                  fontSize: "19px",
-                  fontWeight: "750",
-                  color: "#111827",
-                }}
-              >
+              <h2 style={styles.tableTitle}>
                 Daftar Siswa
               </h2>
 
-              <p
-                style={{
-                  margin: 0,
-                  color: "#64748b",
-                  fontSize: "13px",
-                }}
-              >
-                Menampilkan data dari tabel{" "}
-                <strong style={{ color: "#334155" }}>siswa</strong>
+              <p style={styles.tableSubtitle}>
+                Data dari tabel{" "}
+                <strong>siswa</strong>
               </p>
             </div>
 
-            {/* SEARCH */}
-            <div
-              style={{
-                position: "relative",
-                width: "320px",
-                maxWidth: "100%",
-              }}
-            >
-              <span
-                style={{
-                  position: "absolute",
-                  left: "14px",
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  color: "#94a3b8",
-                  fontSize: "16px",
-                }}
-              >
+            <div style={styles.searchBox}>
+
+              <span style={styles.searchIcon}>
                 🔍
               </span>
 
@@ -524,200 +677,143 @@ function App() {
                 type="text"
                 placeholder="Cari nama, NIS, kelas..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                style={{
-                  width: "100%",
-                  boxSizing: "border-box",
-                  padding: "11px 14px 11px 42px",
-                  border: "1px solid #dbe1ea",
-                  borderRadius: "10px",
-                  outline: "none",
-                  fontSize: "13px",
-                  color: "#1e293b",
-                  backgroundColor: "#f8fafc",
-                }}
+                onChange={(event) =>
+                  setSearch(event.target.value)
+                }
+                style={styles.searchInput}
               />
+
             </div>
+
           </div>
 
           {/* LOADING */}
+
           {loading && (
-            <div
-              style={{
-                padding: "70px 20px",
-                textAlign: "center",
-              }}
-            >
-              <div
-                style={{
-                  width: "38px",
-                  height: "38px",
-                  border: "4px solid #dbeafe",
-                  borderTop: "4px solid #2563eb",
-                  borderRadius: "50%",
-                  margin: "0 auto 18px",
-                  animation: "spin 1s linear infinite",
-                }}
-              />
+            <div style={styles.loading}>
+              <div style={styles.spinner}></div>
 
-              <p
-                style={{
-                  margin: 0,
-                  color: "#2563eb",
-                  fontWeight: "700",
-                  fontSize: "14px",
-                }}
-              >
+              <p>
                 Sedang memuat data...
-              </p>
-
-              <p
-                style={{
-                  margin: "6px 0 0",
-                  color: "#94a3b8",
-                  fontSize: "12px",
-                }}
-              >
-                Menghubungkan ke Supabase
               </p>
             </div>
           )}
 
           {/* ERROR */}
-          {!loading && error && (
-            <div
-              style={{
-                margin: "24px",
-                padding: "20px",
-                backgroundColor: "#fef2f2",
-                border: "1px solid #fecaca",
-                borderRadius: "12px",
-                color: "#b91c1c",
-              }}
-            >
-              <div
-                style={{
-                  fontWeight: "800",
-                  marginBottom: "5px",
-                }}
-              >
-                ⚠️ Gagal mengambil data
-              </div>
 
-              <div
-                style={{
-                  fontSize: "13px",
-                }}
-              >
+          {!loading && error && (
+            <div style={styles.error}>
+              <strong>
+                ⚠️ Gagal mengambil data
+              </strong>
+
+              <p style={{ marginBottom: 0 }}>
                 {error}
-              </div>
+              </p>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  setLoading(true);
+                  await fetchSiswa();
+                  setLoading(false);
+                }}
+                style={styles.retryButton}
+              >
+                Coba Lagi
+              </button>
             </div>
           )}
 
           {/* TABLE */}
+
           {!loading && !error && (
             <>
-              <div
-                style={{
-                  overflowX: "auto",
-                  width: "100%",
-                }}
-              >
-                <table
-                  style={{
-                    width: "100%",
-                    minWidth: "1250px",
-                    borderCollapse: "collapse",
-                  }}
-                >
+              <div style={styles.tableWrapper}>
+
+                <table style={styles.table}>
+
                   <thead>
-                    <tr
-                      style={{
-                        backgroundColor: "#f8fafc",
-                        borderBottom: "1px solid #e2e8f0",
-                      }}
-                    >
-                      <th style={thStyle}>ID</th>
-                      <th style={thStyle}>NIS</th>
-                      <th style={thStyle}>Nama</th>
-                      <th style={thStyle}>Jenis Kelamin</th>
-                      <th style={thStyle}>Tanggal Lahir</th>
-                      <th style={thStyle}>Alamat</th>
-                      <th style={thStyle}>Kelas</th>
-                      <th style={thStyle}>Jurusan</th>
-                      <th style={thStyle}>No. HP</th>
-                      <th style={thStyle}>Email</th>
+                    <tr style={styles.theadRow}>
+
+                      <th style={styles.th}>
+                        ID
+                      </th>
+
+                      <th style={styles.th}>
+                        NIS
+                      </th>
+
+                      <th style={styles.th}>
+                        Nama
+                      </th>
+
+                      <th style={styles.th}>
+                        Jenis Kelamin
+                      </th>
+
+                      <th style={styles.th}>
+                        Tanggal Lahir
+                      </th>
+
+                      <th style={styles.th}>
+                        Alamat
+                      </th>
+
+                      <th style={styles.th}>
+                        Kelas
+                      </th>
+
+                      <th style={styles.th}>
+                        Jurusan
+                      </th>
+
+                      <th style={styles.th}>
+                        No. HP
+                      </th>
+
+                      <th style={styles.th}>
+                        Email
+                      </th>
+
+                      <th style={styles.th}>
+                        Aksi
+                      </th>
+
                     </tr>
                   </thead>
 
                   <tbody>
+
                     {filteredSiswa.length > 0 ? (
                       filteredSiswa.map((item, index) => (
                         <tr
                           key={item.id_siswa}
                           style={{
-                            borderBottom:
-                              "1px solid #f1f5f9",
+                            ...styles.tr,
                             backgroundColor:
                               index % 2 === 0
                                 ? "#ffffff"
-                                : "#fafbfc",
+                                : "#fafbff",
                           }}
                         >
-                          <td style={tdStyle}>
-                            <span
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                minWidth: "32px",
-                                height: "28px",
-                                padding: "0 8px",
-                                borderRadius: "7px",
-                                backgroundColor: "#eff6ff",
-                                color: "#2563eb",
-                                fontWeight: "700",
-                                fontSize: "12px",
-                              }}
-                            >
+
+                          <td style={styles.td}>
+                            <span style={styles.idBadge}>
                               {item.id_siswa}
                             </span>
                           </td>
 
-                          <td style={tdStyle}>
-                            <span
-                              style={{
-                                fontWeight: "600",
-                                color: "#334155",
-                              }}
-                            >
+                          <td style={styles.td}>
+                            <strong>
                               {item.nis || "-"}
-                            </span>
+                            </strong>
                           </td>
 
-                          <td style={tdStyle}>
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "10px",
-                              }}
-                            >
-                              <div
-                                style={{
-                                  width: "34px",
-                                  height: "34px",
-                                  borderRadius: "50%",
-                                  background:
-                                    "linear-gradient(135deg, #dbeafe, #e0e7ff)",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  color: "#3730a3",
-                                  fontWeight: "800",
-                                  fontSize: "13px",
-                                }}
-                              >
+                          <td style={styles.td}>
+                            <div style={styles.nameCell}>
+
+                              <div style={styles.avatar}>
                                 {item.nama
                                   ? item.nama
                                       .charAt(0)
@@ -725,76 +821,66 @@ function App() {
                                   : "?"}
                               </div>
 
-                              <span
-                                style={{
-                                  fontWeight: "700",
-                                  color: "#1e293b",
-                                }}
-                              >
+                              <strong>
                                 {item.nama || "-"}
-                              </span>
+                              </strong>
+
                             </div>
                           </td>
 
-                          <td style={tdStyle}>
+                          <td style={styles.td}>
+
                             {item.jenis_kelamin === "L" ? (
-                              <span style={genderMaleStyle}>
+                              <span style={styles.maleBadge}>
                                 Laki-laki
                               </span>
                             ) : item.jenis_kelamin === "P" ? (
-                              <span style={genderFemaleStyle}>
+                              <span style={styles.femaleBadge}>
                                 Perempuan
                               </span>
                             ) : (
                               item.jenis_kelamin || "-"
                             )}
+
                           </td>
 
-                          <td style={tdStyle}>
-                            {formatTanggal(item.tanggal_lahir)}
+                          <td style={styles.td}>
+                            {formatTanggal(
+                              item.tanggal_lahir
+                            )}
                           </td>
 
                           <td
                             style={{
-                              ...tdStyle,
-                              maxWidth: "180px",
+                              ...styles.td,
+                              maxWidth: "200px",
                               whiteSpace: "normal",
                             }}
                           >
                             {item.alamat || "-"}
                           </td>
 
-                          <td style={tdStyle}>
-                            <span
-                              style={{
-                                padding: "5px 9px",
-                                borderRadius: "6px",
-                                backgroundColor: "#f1f5f9",
-                                color: "#475569",
-                                fontSize: "12px",
-                                fontWeight: "700",
-                              }}
-                            >
+                          <td style={styles.td}>
+                            <span style={styles.classBadge}>
                               {item.kelas || "-"}
                             </span>
                           </td>
 
-                          <td style={tdStyle}>
-                            <span
+                          <td style={styles.td}>
+                            <strong
                               style={{
                                 color: "#4f46e5",
-                                fontWeight: "700",
                               }}
                             >
                               {item.jurusan || "-"}
-                            </span>
+                            </strong>
                           </td>
 
-                          <td style={tdStyle}>
+                          <td style={styles.td}>
                             {item.no_hp || "-"}
                           </td>
 
-                          <td style={tdStyle}>
+                          <td style={styles.td}>
                             <span
                               style={{
                                 color: "#2563eb",
@@ -803,107 +889,529 @@ function App() {
                               {item.email || "-"}
                             </span>
                           </td>
+
+                          {/* AKSI */}
+
+                          <td style={styles.td}>
+
+                            <div style={styles.actionGroup}>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleOpenEdit(item)
+                                }
+                                style={styles.editButton}
+                              >
+                                ✏️ Edit
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleDelete(
+                                    item.id_siswa,
+                                    item.nama
+                                  )
+                                }
+                                style={styles.deleteButton}
+                              >
+                                🗑️ Hapus
+                              </button>
+
+                            </div>
+
+                          </td>
+
                         </tr>
                       ))
                     ) : (
                       <tr key="empty-data">
                         <td
-                          colSpan="10"
-                          style={{
-                            padding: "60px 20px",
-                            textAlign: "center",
-                          }}
+                          colSpan="11"
+                          style={styles.empty}
                         >
                           <div
                             style={{
-                              fontSize: "35px",
-                              marginBottom: "12px",
+                              fontSize: "40px",
+                              marginBottom: "10px",
                             }}
                           >
                             🔍
                           </div>
 
-                          <div
-                            style={{
-                              fontWeight: "700",
-                              color: "#334155",
-                              marginBottom: "5px",
-                            }}
-                          >
+                          <strong>
                             Data tidak ditemukan
-                          </div>
+                          </strong>
 
-                          <div
-                            style={{
-                              fontSize: "13px",
-                              color: "#94a3b8",
-                            }}
-                          >
-                            Coba gunakan kata kunci pencarian lainnya.
-                          </div>
+                          <p>
+                            Coba gunakan kata pencarian
+                            lainnya.
+                          </p>
                         </td>
                       </tr>
                     )}
+
                   </tbody>
+
                 </table>
+
               </div>
 
-              {/* FOOTER TABLE */}
-              <div
-                style={{
-                  padding: "17px 24px",
-                  borderTop: "1px solid #e5e7eb",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: "15px",
-                  flexWrap: "wrap",
-                  backgroundColor: "#fafbfc",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: "13px",
-                    color: "#64748b",
-                  }}
-                >
-                  Menampilkan{" "}
-                  <strong style={{ color: "#334155" }}>
-                    {filteredSiswa.length}
-                  </strong>{" "}
-                  dari{" "}
-                  <strong style={{ color: "#334155" }}>
-                    {siswa.length}
-                  </strong>{" "}
-                  siswa
-                </span>
-
-                {search && (
-                  <button
-                    onClick={() => setSearch("")}
-                    style={{
-                      border: "none",
-                      backgroundColor: "#eff6ff",
-                      color: "#2563eb",
-                      padding: "8px 13px",
-                      borderRadius: "8px",
-                      cursor: "pointer",
-                      fontWeight: "700",
-                      fontSize: "12px",
-                    }}
-                  >
-                    Reset Pencarian
-                  </button>
-                )}
+              <div style={styles.footer}>
+                Menampilkan{" "}
+                <strong>
+                  {filteredSiswa.length}
+                </strong>{" "}
+                dari{" "}
+                <strong>{siswa.length}</strong>{" "}
+                siswa
               </div>
             </>
           )}
+
         </section>
+
       </main>
 
-      {/* =========================
-          ANIMATION
-      ========================= */}
+      {/* =====================================================
+          MODAL POST
+      ===================================================== */}
+
+      {showAddModal && (
+        <div style={styles.overlay}>
+
+          <div style={styles.modal}>
+
+            <div style={styles.modalHeader}>
+
+              <div>
+                <h2 style={styles.modalTitle}>
+                  Tambah Data Siswa
+                </h2>
+
+                <p style={styles.modalSubtitle}>
+                  Masukkan data siswa baru.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddModal(false);
+                  resetForm();
+                }}
+                style={styles.closeButton}
+              >
+                ×
+              </button>
+
+            </div>
+
+            <form onSubmit={handleAdd}>
+
+              <div style={styles.formGrid}>
+
+                <FormInput
+                  label="NIS"
+                  value={form.nis}
+                  placeholder="Contoh: 2026001"
+                  onChange={(event) =>
+                    updateForm(
+                      "nis",
+                      event.target.value
+                    )
+                  }
+                />
+
+                <FormInput
+                  label="Nama"
+                  value={form.nama}
+                  placeholder="Nama lengkap"
+                  onChange={(event) =>
+                    updateForm(
+                      "nama",
+                      event.target.value
+                    )
+                  }
+                />
+
+                <FormSelect
+                  label="Jenis Kelamin"
+                  value={form.jenis_kelamin}
+                  onChange={(event) =>
+                    updateForm(
+                      "jenis_kelamin",
+                      event.target.value
+                    )
+                  }
+                  options={[
+                    {
+                      value: "",
+                      label: "Pilih jenis kelamin",
+                    },
+                    {
+                      value: "L",
+                      label: "Laki-laki",
+                    },
+                    {
+                      value: "P",
+                      label: "Perempuan",
+                    },
+                  ]}
+                />
+
+                <FormInput
+                  label="Tanggal Lahir"
+                  type="date"
+                  value={form.tanggal_lahir}
+                  onChange={(event) =>
+                    updateForm(
+                      "tanggal_lahir",
+                      event.target.value
+                    )
+                  }
+                />
+
+                <div
+                  style={{
+                    gridColumn: "1 / -1",
+                  }}
+                >
+                  <label style={styles.label}>
+                    Alamat
+                  </label>
+
+                  <textarea
+                    required
+                    rows="3"
+                    value={form.alamat}
+                    placeholder="Alamat lengkap"
+                    onChange={(event) =>
+                      updateForm(
+                        "alamat",
+                        event.target.value
+                      )
+                    }
+                    style={{
+                      ...styles.input,
+                      resize: "vertical",
+                    }}
+                  />
+                </div>
+
+                <FormInput
+                  label="Kelas"
+                  value={form.kelas}
+                  placeholder="Contoh: XII PPLG 1"
+                  onChange={(event) =>
+                    updateForm(
+                      "kelas",
+                      event.target.value
+                    )
+                  }
+                />
+
+                <FormInput
+                  label="Jurusan"
+                  value={form.jurusan}
+                  placeholder="Contoh: PPLG"
+                  onChange={(event) =>
+                    updateForm(
+                      "jurusan",
+                      event.target.value
+                    )
+                  }
+                />
+
+                <FormInput
+                  label="No. HP"
+                  value={form.no_hp}
+                  placeholder="081234567890"
+                  onChange={(event) =>
+                    updateForm(
+                      "no_hp",
+                      event.target.value
+                    )
+                  }
+                />
+
+                <FormInput
+                  label="Email"
+                  type="email"
+                  value={form.email}
+                  placeholder="email@gmail.com"
+                  onChange={(event) =>
+                    updateForm(
+                      "email",
+                      event.target.value
+                    )
+                  }
+                />
+
+                {addError && (
+                  <div
+                    style={{
+                      gridColumn: "1 / -1",
+                      ...styles.formError,
+                    }}
+                  >
+                    ⚠️ {addError}
+                  </div>
+                )}
+
+              </div>
+
+              <div style={styles.modalFooter}>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddModal(false);
+                    resetForm();
+                  }}
+                  style={styles.cancelButton}
+                >
+                  Batal
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={saving}
+                  style={styles.primaryButton}
+                >
+                  {saving
+                    ? "Menyimpan..."
+                    : "Simpan Data"}
+                </button>
+
+              </div>
+
+            </form>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* =====================================================
+          MODAL PATCH / EDIT
+      ===================================================== */}
+
+      {showEditModal && (
+        <div style={styles.overlay}>
+
+          <div style={styles.modal}>
+
+            <div style={styles.modalHeader}>
+
+              <div>
+                <h2 style={styles.modalTitle}>
+                  Edit Data Siswa
+                </h2>
+
+                <p style={styles.modalSubtitle}>
+                  Mengubah data siswa ID{" "}
+                  <strong>{editingId}</strong>
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEditModal(false);
+                  resetEditForm();
+                }}
+                style={styles.closeButton}
+              >
+                ×
+              </button>
+
+            </div>
+
+            <form onSubmit={handleUpdate}>
+
+              <div style={styles.formGrid}>
+
+                <FormInput
+                  label="NIS"
+                  value={editForm.nis}
+                  onChange={(event) =>
+                    updateEditForm(
+                      "nis",
+                      event.target.value
+                    )
+                  }
+                />
+
+                <FormInput
+                  label="Nama"
+                  value={editForm.nama}
+                  onChange={(event) =>
+                    updateEditForm(
+                      "nama",
+                      event.target.value
+                    )
+                  }
+                />
+
+                <FormSelect
+                  label="Jenis Kelamin"
+                  value={editForm.jenis_kelamin}
+                  onChange={(event) =>
+                    updateEditForm(
+                      "jenis_kelamin",
+                      event.target.value
+                    )
+                  }
+                  options={[
+                    {
+                      value: "",
+                      label: "Pilih jenis kelamin",
+                    },
+                    {
+                      value: "L",
+                      label: "Laki-laki",
+                    },
+                    {
+                      value: "P",
+                      label: "Perempuan",
+                    },
+                  ]}
+                />
+
+                <FormInput
+                  label="Tanggal Lahir"
+                  type="date"
+                  value={editForm.tanggal_lahir}
+                  onChange={(event) =>
+                    updateEditForm(
+                      "tanggal_lahir",
+                      event.target.value
+                    )
+                  }
+                />
+
+                <div
+                  style={{
+                    gridColumn: "1 / -1",
+                  }}
+                >
+                  <label style={styles.label}>
+                    Alamat
+                  </label>
+
+                  <textarea
+                    required
+                    rows="3"
+                    value={editForm.alamat}
+                    onChange={(event) =>
+                      updateEditForm(
+                        "alamat",
+                        event.target.value
+                      )
+                    }
+                    style={{
+                      ...styles.input,
+                      resize: "vertical",
+                    }}
+                  />
+                </div>
+
+                <FormInput
+                  label="Kelas"
+                  value={editForm.kelas}
+                  onChange={(event) =>
+                    updateEditForm(
+                      "kelas",
+                      event.target.value
+                    )
+                  }
+                />
+
+                <FormInput
+                  label="Jurusan"
+                  value={editForm.jurusan}
+                  onChange={(event) =>
+                    updateEditForm(
+                      "jurusan",
+                      event.target.value
+                    )
+                  }
+                />
+
+                <FormInput
+                  label="No. HP"
+                  value={editForm.no_hp}
+                  onChange={(event) =>
+                    updateEditForm(
+                      "no_hp",
+                      event.target.value
+                    )
+                  }
+                />
+
+                <FormInput
+                  label="Email"
+                  type="email"
+                  value={editForm.email}
+                  onChange={(event) =>
+                    updateEditForm(
+                      "email",
+                      event.target.value
+                    )
+                  }
+                />
+
+                {editError && (
+                  <div
+                    style={{
+                      gridColumn: "1 / -1",
+                      ...styles.formError,
+                    }}
+                  >
+                    ⚠️ {editError}
+                  </div>
+                )}
+
+              </div>
+
+              <div style={styles.modalFooter}>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditModal(false);
+                    resetEditForm();
+                  }}
+                  style={styles.cancelButton}
+                >
+                  Batal
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={updating}
+                  style={styles.primaryButton}
+                >
+                  {updating
+                    ? "Memperbarui..."
+                    : "Simpan Perubahan"}
+                </button>
+
+              </div>
+
+            </form>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* =====================================================
+          CSS ANIMATION
+      ===================================================== */}
+
       <style>
         {`
           @keyframes spin {
@@ -914,88 +1422,676 @@ function App() {
               transform: rotate(360deg);
             }
           }
+
+          * {
+            box-sizing: border-box;
+          }
+
+          body {
+            margin: 0;
+          }
+
+          button {
+            font-family: inherit;
+          }
+
+          button:hover {
+            filter: brightness(0.96);
+          }
+
+          input:focus,
+          textarea:focus,
+          select:focus {
+            border-color: #2563eb !important;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.10);
+          }
+
+          @media (max-width: 700px) {
+            .responsive-form {
+              grid-template-columns: 1fr;
+            }
+          }
         `}
       </style>
+
     </div>
   );
 }
 
-// =========================
-// STYLE
-// =========================
+// =========================================================
+// COMPONENT STAT CARD
+// =========================================================
 
-const statCardStyle = {
-  backgroundColor: "#ffffff",
-  border: "1px solid #e5e7eb",
-  borderRadius: "16px",
-  padding: "20px",
-  display: "flex",
-  alignItems: "center",
-  gap: "16px",
-  boxShadow: "0 6px 20px rgba(15, 23, 42, 0.05)",
-};
+function StatCard({ icon, title, value }) {
+  return (
+    <div style={styles.statCard}>
 
-const iconStyle = {
-  width: "48px",
-  height: "48px",
-  borderRadius: "12px",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: "20px",
-};
+      <div style={styles.statIcon}>
+        {icon}
+      </div>
 
-const statLabelStyle = {
-  margin: "0 0 5px",
-  fontSize: "12px",
-  color: "#64748b",
-  fontWeight: "600",
-};
+      <div>
+        <p style={styles.statLabel}>
+          {title}
+        </p>
 
-const statNumberStyle = {
-  margin: 0,
-  fontSize: "25px",
-  fontWeight: "800",
-  color: "#111827",
-};
+        <h2 style={styles.statValue}>
+          {value}
+        </h2>
+      </div>
 
-const thStyle = {
-  padding: "15px 16px",
-  textAlign: "left",
-  fontSize: "11px",
-  fontWeight: "800",
-  color: "#64748b",
-  textTransform: "uppercase",
-  letterSpacing: "0.5px",
-  whiteSpace: "nowrap",
-};
+    </div>
+  );
+}
 
-const tdStyle = {
-  padding: "14px 16px",
-  fontSize: "13px",
-  color: "#475569",
-  whiteSpace: "nowrap",
-  verticalAlign: "middle",
-};
+// =========================================================
+// COMPONENT INPUT
+// =========================================================
 
-const genderMaleStyle = {
-  display: "inline-block",
-  padding: "6px 10px",
-  borderRadius: "7px",
-  backgroundColor: "#eff6ff",
-  color: "#2563eb",
-  fontSize: "11px",
-  fontWeight: "700",
-};
+function FormInput({
+  label,
+  type = "text",
+  value,
+  placeholder = "",
+  onChange,
+}) {
+  return (
+    <div>
+      <label style={styles.label}>
+        {label}
+      </label>
 
-const genderFemaleStyle = {
-  display: "inline-block",
-  padding: "6px 10px",
-  borderRadius: "7px",
-  backgroundColor: "#fdf2f8",
-  color: "#db2777",
-  fontSize: "11px",
-  fontWeight: "700",
+      <input
+        required
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        onChange={onChange}
+        style={styles.input}
+      />
+    </div>
+  );
+}
+
+// =========================================================
+// COMPONENT SELECT
+// =========================================================
+
+function FormSelect({
+  label,
+  value,
+  options,
+  onChange,
+}) {
+  return (
+    <div>
+      <label style={styles.label}>
+        {label}
+      </label>
+
+      <select
+        required
+        value={value}
+        onChange={onChange}
+        style={styles.input}
+      >
+        {options.map((option) => (
+          <option
+            key={option.value}
+            value={option.value}
+          >
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+// =========================================================
+// STYLES
+// =========================================================
+
+const styles = {
+  page: {
+    minHeight: "100vh",
+    background:
+      "linear-gradient(135deg, #eef4ff 0%, #f8fafc 50%, #eef2ff 100%)",
+    fontFamily:
+      "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    color: "#172033",
+  },
+
+  header: {
+    backgroundColor: "rgba(255,255,255,0.94)",
+    borderBottom: "1px solid #e5e7eb",
+    position: "sticky",
+    top: 0,
+    zIndex: 10,
+    backdropFilter: "blur(12px)",
+  },
+
+  headerInner: {
+    maxWidth: "1500px",
+    margin: "0 auto",
+    padding: "17px 30px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "20px",
+  },
+
+  brand: {
+    display: "flex",
+    alignItems: "center",
+    gap: "13px",
+  },
+
+  logo: {
+    width: "45px",
+    height: "45px",
+    borderRadius: "12px",
+    background:
+      "linear-gradient(135deg,#2563eb,#4f46e5)",
+    color: "#fff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "21px",
+    fontWeight: "800",
+    boxShadow:
+      "0 7px 18px rgba(37,99,235,.25)",
+  },
+
+  brandTitle: {
+    fontSize: "18px",
+    fontWeight: "800",
+    color: "#111827",
+  },
+
+  brandSubtitle: {
+    fontSize: "12px",
+    color: "#64748b",
+    marginTop: "2px",
+  },
+
+  connection: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    padding: "8px 13px",
+    borderRadius: "999px",
+    backgroundColor: "#ecfdf5",
+    border: "1px solid #bbf7d0",
+    color: "#15803d",
+    fontSize: "12px",
+    fontWeight: "700",
+  },
+
+  connectionDot: {
+    width: "8px",
+    height: "8px",
+    borderRadius: "50%",
+    backgroundColor: "#22c55e",
+  },
+
+  main: {
+    maxWidth: "1500px",
+    margin: "0 auto",
+    padding: "35px 30px 50px",
+  },
+
+  hero: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    gap: "20px",
+    flexWrap: "wrap",
+    marginBottom: "28px",
+  },
+
+  eyebrow: {
+    color: "#2563eb",
+    fontSize: "12px",
+    fontWeight: "800",
+    letterSpacing: "1px",
+    marginBottom: "7px",
+  },
+
+  title: {
+    margin: 0,
+    fontSize: "34px",
+    fontWeight: "800",
+    color: "#111827",
+  },
+
+  description: {
+    margin: "9px 0 0",
+    color: "#64748b",
+    fontSize: "14px",
+  },
+
+  addButton: {
+    border: "none",
+    background:
+      "linear-gradient(135deg,#2563eb,#4f46e5)",
+    color: "#fff",
+    padding: "12px 18px",
+    borderRadius: "10px",
+    cursor: "pointer",
+    fontSize: "13px",
+    fontWeight: "700",
+    boxShadow:
+      "0 7px 18px rgba(37,99,235,.25)",
+  },
+
+  success: {
+    marginBottom: "20px",
+    padding: "14px 18px",
+    borderRadius: "10px",
+    backgroundColor: "#ecfdf5",
+    border: "1px solid #bbf7d0",
+    color: "#15803d",
+    fontSize: "13px",
+    fontWeight: "700",
+  },
+
+  statsGrid: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit,minmax(210px,1fr))",
+    gap: "18px",
+    marginBottom: "28px",
+  },
+
+  statCard: {
+    backgroundColor: "#fff",
+    border: "1px solid #e5e7eb",
+    borderRadius: "15px",
+    padding: "20px",
+    display: "flex",
+    alignItems: "center",
+    gap: "15px",
+    boxShadow:
+      "0 6px 20px rgba(15,23,42,.05)",
+  },
+
+  statIcon: {
+    width: "47px",
+    height: "47px",
+    borderRadius: "12px",
+    backgroundColor: "#eff6ff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "20px",
+  },
+
+  statLabel: {
+    margin: "0 0 4px",
+    color: "#64748b",
+    fontSize: "12px",
+    fontWeight: "600",
+  },
+
+  statValue: {
+    margin: 0,
+    color: "#111827",
+    fontSize: "24px",
+    fontWeight: "800",
+  },
+
+  tableCard: {
+    backgroundColor: "#fff",
+    border: "1px solid #e5e7eb",
+    borderRadius: "17px",
+    overflow: "hidden",
+    boxShadow:
+      "0 10px 30px rgba(15,23,42,.06)",
+  },
+
+  tableHeader: {
+    padding: "22px 24px",
+    borderBottom: "1px solid #e5e7eb",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "20px",
+    flexWrap: "wrap",
+  },
+
+  tableTitle: {
+    margin: "0 0 5px",
+    fontSize: "19px",
+    color: "#111827",
+  },
+
+  tableSubtitle: {
+    margin: 0,
+    color: "#64748b",
+    fontSize: "12px",
+  },
+
+  searchBox: {
+    position: "relative",
+    width: "320px",
+    maxWidth: "100%",
+  },
+
+  searchIcon: {
+    position: "absolute",
+    left: "13px",
+    top: "50%",
+    transform: "translateY(-50%)",
+  },
+
+  searchInput: {
+    width: "100%",
+    padding: "11px 13px 11px 39px",
+    border: "1px solid #dbe1ea",
+    borderRadius: "9px",
+    outline: "none",
+    fontSize: "13px",
+    backgroundColor: "#f8fafc",
+  },
+
+  loading: {
+    padding: "70px 20px",
+    textAlign: "center",
+    color: "#2563eb",
+    fontWeight: "700",
+  },
+
+  spinner: {
+    width: "38px",
+    height: "38px",
+    margin: "0 auto 17px",
+    border: "4px solid #dbeafe",
+    borderTop: "4px solid #2563eb",
+    borderRadius: "50%",
+    animation: "spin 1s linear infinite",
+  },
+
+  error: {
+    margin: "24px",
+    padding: "20px",
+    borderRadius: "11px",
+    backgroundColor: "#fef2f2",
+    border: "1px solid #fecaca",
+    color: "#b91c1c",
+    fontSize: "13px",
+  },
+
+  retryButton: {
+    marginTop: "13px",
+    padding: "9px 13px",
+    border: "none",
+    borderRadius: "7px",
+    backgroundColor: "#dc2626",
+    color: "#fff",
+    cursor: "pointer",
+    fontWeight: "700",
+  },
+
+  tableWrapper: {
+    overflowX: "auto",
+  },
+
+  table: {
+    width: "100%",
+    minWidth: "1450px",
+    borderCollapse: "collapse",
+  },
+
+  theadRow: {
+    backgroundColor: "#f8fafc",
+    borderBottom: "1px solid #e2e8f0",
+  },
+
+  th: {
+    padding: "15px 16px",
+    textAlign: "left",
+    color: "#64748b",
+    fontSize: "11px",
+    fontWeight: "800",
+    textTransform: "uppercase",
+    whiteSpace: "nowrap",
+  },
+
+  tr: {
+    borderBottom: "1px solid #f1f5f9",
+  },
+
+  td: {
+    padding: "14px 16px",
+    fontSize: "13px",
+    color: "#475569",
+    whiteSpace: "nowrap",
+    verticalAlign: "middle",
+  },
+
+  idBadge: {
+    display: "inline-flex",
+    minWidth: "32px",
+    height: "28px",
+    padding: "0 8px",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: "7px",
+    backgroundColor: "#eff6ff",
+    color: "#2563eb",
+    fontWeight: "800",
+  },
+
+  nameCell: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+  },
+
+  avatar: {
+    width: "34px",
+    height: "34px",
+    borderRadius: "50%",
+    background:
+      "linear-gradient(135deg,#dbeafe,#e0e7ff)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#3730a3",
+    fontWeight: "800",
+  },
+
+  maleBadge: {
+    padding: "6px 10px",
+    borderRadius: "7px",
+    backgroundColor: "#eff6ff",
+    color: "#2563eb",
+    fontSize: "11px",
+    fontWeight: "700",
+  },
+
+  femaleBadge: {
+    padding: "6px 10px",
+    borderRadius: "7px",
+    backgroundColor: "#fdf2f8",
+    color: "#db2777",
+    fontSize: "11px",
+    fontWeight: "700",
+  },
+
+  classBadge: {
+    padding: "5px 9px",
+    borderRadius: "6px",
+    backgroundColor: "#f1f5f9",
+    color: "#475569",
+    fontSize: "12px",
+    fontWeight: "700",
+  },
+
+  actionGroup: {
+    display: "flex",
+    gap: "7px",
+  },
+
+  editButton: {
+    border: "1px solid #bfdbfe",
+    backgroundColor: "#eff6ff",
+    color: "#2563eb",
+    padding: "8px 11px",
+    borderRadius: "7px",
+    cursor: "pointer",
+    fontSize: "12px",
+    fontWeight: "700",
+  },
+
+  deleteButton: {
+    border: "1px solid #fecaca",
+    backgroundColor: "#fef2f2",
+    color: "#dc2626",
+    padding: "8px 11px",
+    borderRadius: "7px",
+    cursor: "pointer",
+    fontSize: "12px",
+    fontWeight: "700",
+  },
+
+  empty: {
+    padding: "60px 20px",
+    textAlign: "center",
+    color: "#64748b",
+  },
+
+  footer: {
+    padding: "17px 24px",
+    borderTop: "1px solid #e5e7eb",
+    backgroundColor: "#fafbfc",
+    color: "#64748b",
+    fontSize: "13px",
+  },
+
+  overlay: {
+    position: "fixed",
+    inset: 0,
+    backgroundColor: "rgba(15,23,42,.55)",
+    backdropFilter: "blur(5px)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "20px",
+    zIndex: 100,
+  },
+
+  modal: {
+    width: "100%",
+    maxWidth: "700px",
+    maxHeight: "90vh",
+    overflowY: "auto",
+    backgroundColor: "#fff",
+    borderRadius: "17px",
+    boxShadow:
+      "0 25px 60px rgba(15,23,42,.25)",
+  },
+
+  modalHeader: {
+    padding: "22px 25px",
+    borderBottom: "1px solid #e5e7eb",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  modalTitle: {
+    margin: 0,
+    fontSize: "20px",
+    color: "#111827",
+  },
+
+  modalSubtitle: {
+    margin: "5px 0 0",
+    color: "#64748b",
+    fontSize: "12px",
+  },
+
+  closeButton: {
+    width: "35px",
+    height: "35px",
+    border: "none",
+    borderRadius: "8px",
+    backgroundColor: "#f1f5f9",
+    color: "#64748b",
+    fontSize: "20px",
+    cursor: "pointer",
+  },
+
+  formGrid: {
+    padding: "25px",
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(2,minmax(0,1fr))",
+    gap: "18px",
+  },
+
+  label: {
+    display: "block",
+    marginBottom: "7px",
+    color: "#334155",
+    fontSize: "12px",
+    fontWeight: "700",
+  },
+
+  input: {
+    width: "100%",
+    padding: "11px 13px",
+    border: "1px solid #dbe1ea",
+    borderRadius: "9px",
+    outline: "none",
+    fontSize: "13px",
+    color: "#1e293b",
+    backgroundColor: "#fff",
+    fontFamily: "inherit",
+  },
+
+  formError: {
+    padding: "13px 15px",
+    borderRadius: "9px",
+    backgroundColor: "#fef2f2",
+    border: "1px solid #fecaca",
+    color: "#b91c1c",
+    fontSize: "13px",
+  },
+
+  modalFooter: {
+    padding: "18px 25px",
+    borderTop: "1px solid #e5e7eb",
+    backgroundColor: "#fafbfc",
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: "10px",
+  },
+
+  cancelButton: {
+    border: "1px solid #dbe1ea",
+    backgroundColor: "#fff",
+    color: "#475569",
+    padding: "11px 18px",
+    borderRadius: "9px",
+    cursor: "pointer",
+    fontSize: "13px",
+    fontWeight: "700",
+  },
+
+  primaryButton: {
+    border: "none",
+    background:
+      "linear-gradient(135deg,#2563eb,#4f46e5)",
+    color: "#fff",
+    padding: "11px 18px",
+    borderRadius: "9px",
+    cursor: "pointer",
+    fontSize: "13px",
+    fontWeight: "700",
+  },
 };
 
 export default App;
