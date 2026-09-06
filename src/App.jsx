@@ -431,7 +431,6 @@ function App() {
               margin: "8px 0 0",
             }}
           >
-            Admin Dashboard
           </h2>
         </div>
 
